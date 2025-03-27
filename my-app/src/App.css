@@ -1,0 +1,101 @@
+/* Resetting default styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #181818; /* Dark background */
+  color: #ffffff; /* Default text color */
+  font-family: Arial, sans-serif;
+  display: flex;
+  justify-content: flex-end; /* Align chatbot to the right */
+  height: 100vh;
+  width: 100vw;
+}
+
+/* Chatbot Container */
+.chat-container {
+  background-color: #1c1c1c; /* Slightly lighter background for container */
+  border-radius: 0; /* No rounded corners */
+  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.5);
+  width: 400px; /* Fixed width */
+  height: 100vh; /* Full height */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Chatbot Header */
+.chat-title {
+  padding: 20px;
+  text-align: center;
+  background-color: #2c2c2c; /* Header background */
+}
+
+/* Chat Area */
+.chat-area {
+  flex: 1;
+  padding: 10px;
+  overflow-y: auto; /* Allow vertical scrolling if needed */
+  border-bottom: 2px solid #444; /* Separator between message area and input */
+}
+
+/* Message Bubbles */
+.message {
+  margin: 10px 0;
+  padding: 10px;
+  border-radius: 8px;
+  max-width: 75%; /* Prevent messages from taking full width */
+}
+
+/* Bot Message */
+.bot-message {
+  background: none; /* No background */
+  color: #ffffff; /* White text for bot messages */
+  align-self: start; /* Align bot messages to the left */
+}
+
+/* User Message */
+.user-message {
+  background-color: #4a90e2; /* Blue background for user messages */
+  color: #ffffff; /* White text for user messages */
+  align-self: end; /* Align user messages to the right */
+}
+
+/* Input Area */
+.input-container {
+  display: flex;
+  padding: 10px;
+  border-top: 2px solid #444; /* Separate input area from chat area */
+}
+
+/* Input Field */
+.user-input {
+  flex: 1; /* Takes available space */
+  padding: 10px;
+  border: none;
+  border-radius: 5px;
+  margin-right: 10px;
+  background-color: #333; /* Input background */
+  color: #ffffff; /* Input text color */
+}
+
+.user-input::placeholder {
+  color: #aaa; /* Placeholder text color */
+}
+
+/* Send Button */
+.send-button {
+  padding: 10px 15px;
+  background-color: #4a90e2; /* Send button background */
+  color: #ffffff; /* Send button text color */
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s; /* Smooth transition for hover effect */
+}
+
+.send-button:hover {
+  background-color: #357ab8; /* Darken send button on hover */
+}
