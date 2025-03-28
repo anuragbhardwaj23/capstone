@@ -5,12 +5,12 @@ from uuid import uuid4
 import spacy
 import re
 
-app = FastAPI(title="Travel Recommendation Chatbot", version="1.1")
+app = FastAPI(title="Travel Recommendation Chatbot", version="1.2")
 
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for testing
+    allow_origins=["*"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -27,12 +27,17 @@ chat_sessions = {}
 # Welcome message
 WELCOME_MESSAGE = "Hello! I’m your travel assistant. How can I help you today?"
 
-# Categories we support
-CATEGORY_KEYWORDS = {
-    "student": ["student", "university"],
-    "senior": ["senior", "elderly"],
-    "army": ["army", "military", "armed forces"]
-}
+# Travel-related keywords
+TRAVEL_KEYWORDS = [
+    "flight", "hotel", "destination", "trip", "airport", "train", "bus",
+    "visa", "travel", "vacation", "tour", "booking", "journey", "ticket",
+    "airline", "stay", "holiday", "luggage", "city", "car rental"
+]
+
+# Function to check if a query is travel-related
+def is_travel_related(query):
+    query = query.lower()
+    return any(keyword in query for keyword in TRAVEL_KEYWORDS)
 
 # Dummy flight data
 dummy_data = {
@@ -53,7 +58,7 @@ def preprocess_and_extract_entities(text):
     clean_text = re.sub(r"[^\w\s]", "", text.lower())
     doc = nlp(clean_text)
 
-    source = destination = travel_date = category = None
+    source = destination = travel_date = None
 
     for ent in doc.ents:
         if ent.label_ == "GPE":
@@ -62,24 +67,21 @@ def preprocess_and_extract_entities(text):
             else:
                 destination = ent.text.title()
         elif ent.label_ == "DATE":
-            travel_date = ent.text  # Handle date parsing here if needed
+            travel_date = ent.text
 
-    for word in clean_text.split():
-        for key, values in CATEGORY_KEYWORDS.items():
-            if word in values:
-                category = key
-
-    return source, destination, travel_date, category
+    return source, destination, travel_date
 
 # Function to clean AI responses (Remove Markdown-style formatting)
 def clean_response(text):
-    text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)  # Remove **bold**
-    text = re.sub(r"#{1,3}\s*", "", text)  # Remove #, ##, ###
+    text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)  
+    text = re.sub(r"#{1,3}\s*", "", text)  
     return text.strip()
 
-# Query AI model
+# Query AI model (Only for travel-related queries)
 def query_together_ai(user_input, chat_history):
-    messages = [{"role": "system", "content": "You are a helpful travel assistant that recommends flights and hotels."}]
+    messages = [
+        {"role": "system", "content": "You are a travel assistant. Only answer questions related to travel, flights, hotels, and tourism. If the user asks something else, say 'I can only assist with travel-related queries.'"}
+    ]
     messages += chat_history
     messages.append({"role": "user", "content": user_input})
 
@@ -91,9 +93,9 @@ def query_together_ai(user_input, chat_history):
         if response.choices:
             raw_response = response.choices[0].message.content
             cleaned_response = re.sub(r"<think>.*?</think>", "", raw_response, flags=re.DOTALL).strip()
-            return clean_response(cleaned_response) if cleaned_response else "Sorry, I couldn't find relevant results."
+            return clean_response(cleaned_response) if cleaned_response else "I can only assist with travel-related queries."
         else:
-            return "Sorry, I couldn't find relevant results."
+            return "I can only assist with travel-related queries."
     except Exception as e:
         return f"Error retrieving AI response: {str(e)}"
 
@@ -105,13 +107,19 @@ def home():
 def recommend(query: str = "", session_id: str = None):
     session_id = session_id or str(uuid4())
 
+    if not is_travel_related(query):
+        return {
+            "session_id": session_id,
+            "response": "I can only assist with travel-related queries.",
+            "collected": {}
+        }
+
     if session_id not in chat_sessions:
         chat_sessions[session_id] = {
             "chat_history": [{"role": "assistant", "content": WELCOME_MESSAGE}],
             "source": None,
             "destination": None,
-            "date": None,
-            "category": None
+            "date": None
         }
         return {
             "session_id": session_id,
@@ -122,7 +130,7 @@ def recommend(query: str = "", session_id: str = None):
     session_data = chat_sessions[session_id]
 
     # Extract entities from the query
-    src, dest, date, cat = preprocess_and_extract_entities(query)
+    src, dest, date = preprocess_and_extract_entities(query)
 
     if src:
         session_data["source"] = src
@@ -130,23 +138,20 @@ def recommend(query: str = "", session_id: str = None):
         session_data["destination"] = dest
     if date:
         session_data["date"] = date
-    if cat:
-        session_data["category"] = cat
 
     session_data["chat_history"].append({"role": "user", "content": query})
 
     # Check flights in dummy data
     for flight in dummy_data["flights"]:
         if (
-            session_data.get("source") and session_data.get("destination") and session_data.get("date") and session_data.get("category") and
+            session_data.get("source") and session_data.get("destination") and session_data.get("date") and
             flight["source"].lower() == session_data["source"].lower() and
             flight["destination"].lower() == session_data["destination"].lower() and
-            flight["date"] == session_data["date"] and
-            flight["category"] == session_data["category"]
+            flight["date"] == session_data["date"]
         ):
             response_text = (
-                f"Here is a {session_data['category']} discounted flight from {session_data['source']} "
-                f"to {session_data['destination']} on {session_data['date']} for {flight['price']}."
+                f"Here is a flight from {session_data['source']} to {session_data['destination']} "
+                f"on {session_data['date']} for {flight['price']}."
             )
             session_data["chat_history"].append({"role": "assistant", "content": response_text})
             chat_sessions[session_id] = session_data
