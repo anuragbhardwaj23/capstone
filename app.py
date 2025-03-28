@@ -4,7 +4,6 @@ from together import Together
 from uuid import uuid4
 import spacy
 import re
-import json
 
 app = FastAPI(title="Travel Recommendation Chatbot", version="1.1")
 
@@ -25,6 +24,9 @@ nlp = spacy.load("en_core_web_sm")
 # Session-based memory
 chat_sessions = {}
 
+# Welcome message
+WELCOME_MESSAGE = "Hello! I’m your travel assistant. How can I help you today?"
+
 # Categories we support
 CATEGORY_KEYWORDS = {
     "student": ["student", "university"],
@@ -32,7 +34,7 @@ CATEGORY_KEYWORDS = {
     "army": ["army", "military", "armed forces"]
 }
 
-# Dummy data
+# Dummy flight data
 dummy_data = {
     "flights": [
         {"source": "Delhi", "destination": "Bangalore", "date": "2025-04-28", "category": "student", "price": "₹7000"},
@@ -43,18 +45,6 @@ dummy_data = {
         {"source": "Kolkata", "destination": "Delhi", "date": "2025-06-20", "category": "student", "price": "₹6200"},
         {"source": "San Francisco", "destination": "New York", "date": "2025-07-04", "category": "student", "price": "$300"},
         {"source": "Los Angeles", "destination": "Chicago", "date": "2025-08-10", "category": "army", "price": "$250"}
-    ],
-    "hotels": [
-        {"city": "Los Angeles", "name": "Hilton LA", "rating": 4.5, "price_per_night": 120},
-        {"city": "San Francisco", "name": "Marriott SF", "rating": 4.7, "price_per_night": 150},
-        {"city": "Bangalore", "name": "The Leela Palace", "rating": 4.9, "price_per_night": 1800},
-        {"city": "Delhi", "name": "Taj Mahal Hotel", "rating": 4.8, "price_per_night": 2200},
-        {"city": "Mumbai", "name": "The Oberoi", "rating": 4.6, "price_per_night": 2500},
-        {"city": "Chennai", "name": "ITC Grand Chola", "rating": 4.7, "price_per_night": 2300},
-        {"city": "Kolkata", "name": "JW Marriott", "rating": 4.6, "price_per_night": 2100},
-        {"city": "Hyderabad", "name": "Hyatt Hyderabad", "rating": 4.5, "price_per_night": 1900},
-        {"city": "New York", "name": "Plaza Hotel", "rating": 4.9, "price_per_night": 350},
-        {"city": "Chicago", "name": "Four Seasons", "rating": 4.8, "price_per_night": 320}
     ]
 }
 
@@ -81,7 +71,13 @@ def preprocess_and_extract_entities(text):
 
     return source, destination, travel_date, category
 
-# Query AI model and filter out <think></think> content
+# Function to clean AI responses (Remove Markdown-style formatting)
+def clean_response(text):
+    text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)  # Remove **bold**
+    text = re.sub(r"#{1,3}\s*", "", text)  # Remove #, ##, ###
+    return text.strip()
+
+# Query AI model
 def query_together_ai(user_input, chat_history):
     messages = [{"role": "system", "content": "You are a helpful travel assistant that recommends flights and hotels."}]
     messages += chat_history
@@ -94,9 +90,8 @@ def query_together_ai(user_input, chat_history):
         )
         if response.choices:
             raw_response = response.choices[0].message.content
-            # Remove content inside <think> </think> tags
             cleaned_response = re.sub(r"<think>.*?</think>", "", raw_response, flags=re.DOTALL).strip()
-            return cleaned_response if cleaned_response else "Sorry, I couldn't find relevant results."
+            return clean_response(cleaned_response) if cleaned_response else "Sorry, I couldn't find relevant results."
         else:
             return "Sorry, I couldn't find relevant results."
     except Exception as e:
@@ -107,16 +102,24 @@ def home():
     return {"message": "Welcome to the Travel Recommendation API"}
 
 @app.get("/recommend")
-def recommend(query: str, session_id: str = None):
+def recommend(query: str = "", session_id: str = None):
     session_id = session_id or str(uuid4())
 
-    session_data = chat_sessions.get(session_id, {
-        "chat_history": [],
-        "source": None,
-        "destination": None,
-        "date": None,
-        "category": None
-    })
+    if session_id not in chat_sessions:
+        chat_sessions[session_id] = {
+            "chat_history": [{"role": "assistant", "content": WELCOME_MESSAGE}],
+            "source": None,
+            "destination": None,
+            "date": None,
+            "category": None
+        }
+        return {
+            "session_id": session_id,
+            "response": WELCOME_MESSAGE,
+            "collected": chat_sessions[session_id]
+        }
+
+    session_data = chat_sessions[session_id]
 
     # Extract entities from the query
     src, dest, date, cat = preprocess_and_extract_entities(query)
@@ -153,7 +156,7 @@ def recommend(query: str, session_id: str = None):
                 "collected": session_data
             }
 
-    # If no match found, call Together AI
+    # If no match found, call AI model
     response_text = query_together_ai(query, session_data["chat_history"])
     session_data["chat_history"].append({"role": "assistant", "content": response_text})
     chat_sessions[session_id] = session_data
@@ -163,13 +166,3 @@ def recommend(query: str, session_id: str = None):
         "response": response_text,
         "collected": session_data
     }
-
-@app.get("/hotels")
-def hotels(city: str, min_rating: float = 0, max_price: float = float("inf")):
-    matching_hotels = [
-        hotel for hotel in dummy_data["hotels"]
-        if hotel["city"].lower() == city.lower() and
-           hotel["rating"] >= min_rating and
-           hotel["price_per_night"] <= max_price
-    ]
-    return {"hotels": matching_hotels} if matching_hotels else {"message": f"No hotels found in {city} matching the criteria."}
